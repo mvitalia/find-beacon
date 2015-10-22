@@ -1,143 +1,146 @@
-// JavaScript code for the BLE Scan example app.
-
-// Application object.
-var app = {};
-
-// Device list.
-app.devices = {};
-
-// UI methods.
-app.ui = {};
-
-// Timer that updates the device list and removes inactive
-// devices in case no devices are found by scan.
-app.ui.updateTimer = null;
-
-app.initialize = function()
+var app = (function()
 {
-	document.addEventListener(
-		'deviceready',
-		function() { evothings.scriptsLoaded(app.onDeviceReady) },
-		false);
-};
+	// Application object.
+	var app = {};
 
-app.onDeviceReady = function()
-{
-	// Not used.
-	// Here you can update the UI to say that
-	// the device (the phone/tablet) is ready
-	// to use BLE and other Cordova functions.
-};
+	// Specify your beacon 128bit UUIDs here.
+	var regions =
+	[
+		// Estimote Beacon factory UUID.
+		{uuid:'B9407F30-F5F8-466E-AFF9-25556B57FE6D'},
+		// Sample UUIDs for beacons in our lab.
+		{uuid:'F7826DA6-4FA2-4E98-8024-BC5B71E0893E'},
+		{uuid:'8DEEFBB9-F738-4297-8040-96668BB44281'},
+		{uuid:'A0B13730-3A9A-11E3-AA6E-0800200C9A66'},
+		{uuid:'E20A39F4-73F5-4BC4-A12F-17D1AD07A961'},
+		{uuid:'A4950001-C5B1-4B44-B512-1370F02D74DE'}
+	];
 
-// Start the scan. Call the callback function when a device is found.
-// Format:
-//   callbackFun(deviceInfo, errorCode)
-//   deviceInfo: address, rssi, name
-//   errorCode: String
-app.startScan = function(callbackFun)
-{
-	app.stopScan();
+	// Dictionary of beacons.
+	var beacons = {};
 
-	evothings.ble.startScan(
-		function(device)
+	// Timer that displays list of beacons.
+	var updateTimer = null;
+
+	app.initialize = function()
+	{
+		document.addEventListener(
+			'deviceready',
+			function() { evothings.scriptsLoaded(onDeviceReady) },
+			false);
+	};
+
+	function onDeviceReady()
+	{
+		// Specify a shortcut for the location manager holding the iBeacon functions.
+		window.locationManager = cordova.plugins.locationManager;
+
+		// Start tracking beacons!
+		startScan();
+
+		// Display refresh timer.
+		updateTimer = setInterval(displayBeaconList, 500);
+	}
+
+	function startScan()
+	{
+		// The delegate object holds the iBeacon callback functions
+		// specified below.
+		var delegate = new locationManager.Delegate();
+
+		// Called continuously when ranging beacons.
+		delegate.didRangeBeaconsInRegion = function(pluginResult)
 		{
-			// Report success. Sometimes an RSSI of +127 is reported.
-			// We filter out these values here.
-			if (device.rssi <= 0)
+			//console.log('didRangeBeaconsInRegion: ' + JSON.stringify(pluginResult))
+			for (var i in pluginResult.beacons)
 			{
-				callbackFun(device, null);
+				// Insert beacon into table of found beacons.
+				var beacon = pluginResult.beacons[i];
+				beacon.timeStamp = Date.now();
+				var key = beacon.uuid + ':' + beacon.major + ':' + beacon.minor;
+				beacons[key] = beacon;
 			}
-		},
-		function(errorCode)
+		};
+
+		// Called when starting to monitor a region.
+		// (Not used in this example, included as a reference.)
+		delegate.didStartMonitoringForRegion = function(pluginResult)
 		{
-			// Report error.
-			callbackFun(null, errorCode);
-		}
-	);
-};
+			//console.log('didStartMonitoringForRegion:' + JSON.stringify(pluginResult))
+		};
 
-// Stop scanning for devices.
-app.stopScan = function()
-{
-	evothings.ble.stopScan();
-};
-
-// Called when Start Scan button is selected.
-app.ui.onStartScanButton = function()
-{
-	app.startScan(app.ui.deviceFound);
-	app.ui.displayStatus('Scanning...');
-	app.ui.updateTimer = setInterval(app.ui.displayDeviceList, 500);
-};
-
-// Called when Stop Scan button is selected.
-app.ui.onStopScanButton = function()
-{
-	app.stopScan();
-	app.devices = {};
-	app.ui.displayStatus('Scan Paused');
-	app.ui.displayDeviceList();
-	clearInterval(app.ui.updateTimer);
-};
-
-// Called when a device is found.
-app.ui.deviceFound = function(device, errorCode)
-{
-	if (device)
-	{
-		// Set timestamp for device (this is used to remove
-		// inactive devices).
-		device.timeStamp = Date.now();
-
-		// Insert the device into table of found devices.
-		app.devices[device.address] = device;
-	}
-	else if (errorCode)
-	{
-		app.ui.displayStatus('Scan Error: ' + errorCode);
-	}
-};
-
-// Display the device list.
-app.ui.displayDeviceList = function()
-{
-	// Clear device list.
-	$('#found-devices').empty();
-
-	var timeNow = Date.now();
-
-	$.each(app.devices, function(key, device)
-	{
-		// Only show devices that are updated during the last 10 seconds.
-		if (device.timeStamp + 10000 > timeNow)
+		// Called when monitoring and the state of a region changes.
+		// (Not used in this example, included as a reference.)
+		delegate.didDetermineStateForRegion = function(pluginResult)
 		{
-			// Map the RSSI value to a width in percent for the indicator.
-			var rssiWidth = 100; // Used when RSSI is zero or greater.
-			if (device.rssi < -100) { rssiWidth = 0; }
-			else if (device.rssi < 0) { rssiWidth = 100 + device.rssi; }
+			//console.log('didDetermineStateForRegion: ' + JSON.stringify(pluginResult))
+		};
 
-			// Create tag for device data.
-			var element = $(
-				'<li>'
-				+	'<strong>' + device.name + '</strong><br />'
-				// Do not show address on iOS since it can be confused
-				// with an iBeacon UUID.
-				+	(evothings.os.isIOS() ? '' : device.address + '<br />')
-				+	device.rssi + '<br />'
-				+ 	'<div style="background:rgb(225,0,0);height:20px;width:'
-				+ 		rssiWidth + '%;"></div>'
-				+ '</li>'
-			);
+		// Set the delegate object to use.
+		locationManager.setDelegate(delegate);
 
-			$('#found-devices').append(element);
+		// Request permission from user to access location info.
+		// This is needed on iOS 8.
+		locationManager.requestAlwaysAuthorization();
+
+		// Start monitoring and ranging beacons.
+		for (var i in regions)
+		{
+			var beaconRegion = new locationManager.BeaconRegion(
+				i + 1,
+				regions[i].uuid);
+
+			// Start ranging.
+			locationManager.startRangingBeaconsInRegion(beaconRegion)
+				.fail(console.error)
+				.done();
+
+			// Start monitoring.
+			// (Not used in this example, included as a reference.)
+			locationManager.startMonitoringForRegion(beaconRegion)
+				.fail(console.error)
+				.done();
 		}
-	});
-};
+	}
 
-// Display a status message
-app.ui.displayStatus = function(message)
-{
-	$('#scan-status').html(message);
-};
+	function displayBeaconList()
+	{
+		// Clear beacon list.
+		$('#found-beacons').empty();
+
+		var timeNow = Date.now();
+
+		// Update beacon list.
+		$.each(beacons, function(key, beacon)
+		{
+			// Only show beacons that are updated during the last 60 seconds.
+			if (beacon.timeStamp + 60000 > timeNow)
+			{
+				// Map the RSSI value to a width in percent for the indicator.
+				var rssiWidth = 1; // Used when RSSI is zero or greater.
+				if (beacon.rssi < -100) { rssiWidth = 100; }
+				else if (beacon.rssi < 0) { rssiWidth = 100 + beacon.rssi; }
+
+				// Create tag to display beacon data.
+				var element = $(
+					'<li>'
+					+	'<strong>UUID: ' + beacon.uuid + '</strong><br />'
+					+	'Major: ' + beacon.major + '<br />'
+					+	'Minor: ' + beacon.minor + '<br />'
+					+	'Proximity: ' + beacon.proximity + '<br />'
+					+	'RSSI: ' + beacon.rssi + '<br />'
+					+ 	'<div style="background:rgb(255,128,64);height:20px;width:'
+					+ 		rssiWidth + '%;"></div>'
+					+ '</li>'
+				);
+
+				$('#warning').remove();
+				$('#found-beacons').append(element);
+			}
+		});
+	}
+
+	return app;
+})();
 
 app.initialize();
