@@ -33,7 +33,6 @@
 	<gap:platform name="android" />
 	<gap:platform name="winphone" />
 	
-	<preference name="phonegap-version" value="3.7" /> 
     <preference name="DisallowOverscroll" value="true" />
 	<preference name="LoadUrlTimeoutValue" value="10000"/>
 	<preference name="LoadingDialog" value="Attendere"/>
