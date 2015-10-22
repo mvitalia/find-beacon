@@ -41,7 +41,6 @@ app.startScan = function(callbackFun)
 	evothings.ble.startScan(
 		function(device)
 		{
-			alert(JSON.stringify(device));
 			// Report success. Sometimes an RSSI of +127 is reported.
 			// We filter out these values here.
 			if (device.rssi <= 0)
